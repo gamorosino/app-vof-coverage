@@ -25,49 +25,74 @@ source "${STRlib}"
 source "${FILElib}"
 source "${ARRAYlib}"
 
+track_getMask() {
+    if [ $# -lt 2 ]; then
+        echo "Usage: track_getMask <track_in.trk> <mask_out.nii.gz> [reference.nii.gz]"
+        return 1
+    fi
 
-track_getMask () {
-                #############################################################
-                # track_getMask — Generate a binary WM mask from a tractogram
-                #
-                # Usage: track_getMask <tractogram.tck> <out_mask.nii.gz> <reference.nii.gz>
-                #
-                # Steps:
-                #   1. tckmap  → track-density image (TDI)
-                #   2. fslmaths -bin  → binary mask
-                #############################################################
+    local input1="$1"
+    local input2="$2"
+    local input3="${3:-}"
 
-if [ $# -lt 3 ]; then
-    echo $0: "usage: track_getMask <tractogram.tck> <out_mask.nii.gz> <reference.nii.gz>"
-    return 1;
-fi
+    python << END
+import sys
+import os
+import nibabel as nib
+import numpy as np
 
-local tractogram="${1}"
-local out_mask="${2}"
-local reference="${3}"
+from dipy.tracking.vox2track import streamline_mapping
+from dipy.io.streamline import load_tractogram
 
-local out_dir=$( dirname "${out_mask}" )
-mkdir -p "${out_dir}"
 
-local stem=$( basename "${out_mask}" .nii.gz )
-local tdi_tmp="${out_dir}/${stem}_tdi_tmp.nii.gz"
+def loadTrk(track_filename):
+    sft = load_tractogram(track_filename, 'same', bbox_valid_check=False)
+    streamlines = sft.streamlines
+    affine = sft.space_attributes[0]
+    header = sft.space_attributes
+    return streamlines, affine, header
 
-echo "[track_getMask] tractogram : ${tractogram}"
-echo "[track_getMask] reference  : ${reference}"
-echo "[track_getMask] output     : ${out_mask}"
 
-# Step 1: create track-density image
-tckmap "${tractogram}" "${tdi_tmp}" \
--template "${reference}" \
--quiet -force
+def track2mask(track_filename, output_filename=None, structural_filename=None):
+    track, track_aff, _ = loadTrk(track_filename)
 
-# Step 2: binarise
-fslmaths "${tdi_tmp}" -bin "${out_mask}"
+    if structural_filename is None or len(structural_filename) == 0:
+        sft = load_tractogram(track_filename, 'same', bbox_valid_check=False)
+        sft.to_vox()
+        sft.to_corner()
+        transformation, dimensions, _, _ = sft.space_attributes
 
-rm -f "${tdi_tmp}"
+        stream_map = streamline_mapping(track, affine=track_aff)
+        Points = np.zeros(dimensions, dtype=np.uint8)
 
-echo "[track_getMask] Done: ${out_mask}"
-};
+        for idx in stream_map.keys():
+            Points[idx[0], idx[1], idx[2]] = 1
+
+        if output_filename is not None:
+            nib.save(nib.Nifti1Image(Points, transformation), output_filename)
+
+    else:
+        struct_nib = nib.load(structural_filename)
+        affine = struct_nib.affine
+        header = struct_nib.header
+        struct_data = struct_nib.get_fdata()
+
+        stream_map = streamline_mapping(track, affine=affine)
+        Points = np.zeros(struct_data.shape, dtype=np.uint8)
+
+        for idx in stream_map.keys():
+            Points[idx[0], idx[1], idx[2]] = 1
+
+        if output_filename is not None:
+            nii_output = nib.Nifti1Image(Points, affine=affine, header=header)
+            nii_output.to_filename(output_filename)
+
+    return Points
+
+
+track2mask("$input1", "$input2", "$input3")
+END
+}
 
 
 track_filter_length () {
