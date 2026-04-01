@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# main — Brainlife app entrypoint for VISCONN VOF coverage pipeline.
+#
+# Validates required config.json fields, then launches main.py inside the
+# tract_align Singularity/Docker container.
+#
+# Environment variable BL_CONTAINER_IMAGE can override the default image.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONTAINER_IMAGE="${BL_CONTAINER_IMAGE:-docker://gamorosino/tract_align:v1.0}"
+
+# ---------------------------------------------------------------------------
+# Validate config.json exists
+# ---------------------------------------------------------------------------
+if [ ! -f "${SCRIPT_DIR}/config.json" ]; then
+    echo "[ERROR] config.json not found in ${SCRIPT_DIR}" >&2
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Check required fields in config.json using jq (if available)
+# ---------------------------------------------------------------------------
+if command -v jq &>/dev/null; then
+    required_keys=("tractogram" "t1" "aparc" "label" "varea" "polarAngle")
+    missing=()
+    for key in "${required_keys[@]}"; do
+        val=$(jq -r ".${key} // empty" "${SCRIPT_DIR}/config.json")
+        if [ -z "${val}" ]; then
+            missing+=("${key}")
+        fi
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "[ERROR] Missing required config.json fields: ${missing[*]}" >&2
+        exit 1
+    fi
+    echo "[main] Config validated. Required fields present."
+else
+    echo "[main] jq not found; skipping config validation."
+fi
+
+# ---------------------------------------------------------------------------
+# Create Brainlife output directories
+# ---------------------------------------------------------------------------
+mkdir -p "${SCRIPT_DIR}/images"
+mkdir -p "${SCRIPT_DIR}/vof"
+
+# ---------------------------------------------------------------------------
+# Run pipeline inside Singularity container
+# ---------------------------------------------------------------------------
+echo "[main] Running VISCONN pipeline with Singularity: ${CONTAINER_IMAGE}"
+singularity exec -e \
+    --bind "${SCRIPT_DIR}:${SCRIPT_DIR}" \
+    "${CONTAINER_IMAGE}" \
+    micromamba run -n tract_align \
+    python3 "${SCRIPT_DIR}/main.py" \
+    --config "${SCRIPT_DIR}/config.json"
+
+echo "[main] Done. Outputs:"
+echo "  Tractograms : ${SCRIPT_DIR}/vof/"
+echo "  Images      : ${SCRIPT_DIR}/images/"

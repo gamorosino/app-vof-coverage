@@ -1,0 +1,16 @@
+{
+    "_comment": "Example Brainlife runtime config.json for app-vof-coverage (VISCONN pipeline). Replace paths with actual runtime values.",
+    "tractogram":   "../../track.tck",
+    "t1":           "../../t1.nii.gz",
+    "output":       "../../output",
+    "polarAngle":   "../../prf/lh.benson14_angle.nii.gz",
+    "eccentricity": "../../prf/lh.benson14_eccen.nii.gz",
+    "rfWidth":      "../../prf/lh.benson14_sigma.nii.gz",
+    "r2":           "../../prf/lh.benson14_vexvar.nii.gz",
+    "varea":        "../../prf/lh.benson14_varea.nii.gz",
+    "surfaces":     "../../surfaces",
+    "prf_surfaces": "../../prf_surfaces",
+    "aparc":        "../../parc/parc.nii.gz",
+    "key":          "../../parc/key.txt",
+    "label":        "../../parc/label.json"
+}
