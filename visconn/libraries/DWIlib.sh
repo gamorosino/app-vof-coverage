@@ -36,8 +36,6 @@ track_getMask() {
     local input3="${3:-}"
 
     python << END
-import sys
-import os
 import nibabel as nib
 import numpy as np
 
@@ -45,12 +43,12 @@ from dipy.tracking.vox2track import streamline_mapping
 from dipy.io.streamline import load_tractogram
 
 
-def loadTrk(track_filename):
-    sft = load_tractogram(track_filename, 'same', bbox_valid_check=False)
-    streamlines = sft.streamlines
-    affine = sft.space_attributes[0]
-    header = sft.space_attributes
-    return streamlines, affine, header
+def loadTrk(filename):
+    data = nib.streamlines.load(filename)
+    s = data.streamlines
+    aff = data.affine
+    header = data.header
+    return s, aff, header
 
 
 def track2mask(track_filename, output_filename=None, structural_filename=None):
@@ -93,7 +91,6 @@ def track2mask(track_filename, output_filename=None, structural_filename=None):
 track2mask("$input1", "$input2", "$input3")
 END
 }
-
 
 track_filter_length () {
                 #############################################################
