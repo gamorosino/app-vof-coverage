@@ -11,6 +11,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER_IMAGE="${BL_CONTAINER_IMAGE:-docker://gamorosino/tract_align:v1.0}"
 
+run_in_env() {
+    if singularity exec -e "${CONTAINER_IMAGE}" sh -lc 'command -v micromamba >/dev/null 2>&1'; then
+        singularity exec -e \
+            --bind "${SCRIPT_DIR}:${SCRIPT_DIR}" \
+            "${CONTAINER_IMAGE}" \
+            micromamba run -n tract_align "$@"
+    else
+        singularity exec -e \
+            --bind "${SCRIPT_DIR}:${SCRIPT_DIR}" \
+            "${CONTAINER_IMAGE}" \
+            "$@"
+    fi
+}
+
 # ---------------------------------------------------------------------------
 # Validate config.json exists
 # ---------------------------------------------------------------------------
@@ -50,13 +64,12 @@ mkdir -p "${SCRIPT_DIR}/vof"
 # Run pipeline inside Singularity container
 # ---------------------------------------------------------------------------
 echo "[main] Running VISCONN pipeline with Singularity: ${CONTAINER_IMAGE}"
-singularity exec -e \
-    --bind "${SCRIPT_DIR}:${SCRIPT_DIR}" \
-    "${CONTAINER_IMAGE}" \
-    micromamba run -n tract_align \
-    python3 "${SCRIPT_DIR}/main.py" \
+run_in_env python3 "${SCRIPT_DIR}/main.py" \
     --config "${SCRIPT_DIR}/config.json"
+
+bash ./generate_product_json.sh "${SCRIPT_DIR}/images/" "./product.json"
 
 echo "[main] Done. Outputs:"
 echo "  Tractograms : ${SCRIPT_DIR}/vof/"
 echo "  Images      : ${SCRIPT_DIR}/images/"
+
