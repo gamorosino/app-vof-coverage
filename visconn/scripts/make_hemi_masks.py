@@ -3,101 +3,178 @@
 make_hemi_masks.py — Generate left and right hemisphere binary masks
 from a parcellation volume (aparc) and a label JSON file.
 
-Label JSON format expected (FreeSurfer-style):
-    { "voxel_value": 1, "name": "Left-Cerebral-White-Matter", ... }
-    or as an array:
-    [ { "voxel_value": 1, "name": "Left-Cerebral-White-Matter" }, ... ]
-
 Usage:
     python3 make_hemi_masks.py --aparc aparc.nii.gz --label label.json \
         --out-dir /path/to/outdir
 
 Outputs:
-    <out-dir>/hemi_L.nii.gz  — binary mask, 1 where aparc is a Left-* label
-    <out-dir>/hemi_R.nii.gz  — binary mask, 1 where aparc is a Right-* label
+    <out-dir>/hemi_L.nii.gz
+    <out-dir>/hemi_R.nii.gz
 """
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
+from typing import Dict, Tuple
 
 import nibabel as nib
 import numpy as np
 
 
-def load_label_json(label_path: Path) -> dict:
-    """Load label.json and return a dict mapping voxel_value → name."""
+EXCLUDE_NAME_SUBSTRINGS = (
+    "Ventricle",
+    "ventricle",
+    "CSF",
+    "Vessel",
+    "vessel",
+    "Choroid-Plexus",
+    "choroid",
+    "Unknown",
+    "unknown",
+    "Lesion",
+    "WM-hypointensities",
+    "non-WM-hypointensities",
+    "Optic-Chiasm",
+    "Exterior",
+)
+
+
+def load_label_json(label_path: Path) -> Dict[int, str]:
+    """Load label.json and return a dict mapping voxel_value -> name."""
     raw = json.loads(label_path.read_text())
+
     if isinstance(raw, list):
-        return {entry["voxel_value"]: entry["name"] for entry in raw}
+        out = {}
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            if "voxel_value" in entry and "name" in entry:
+                try:
+                    out[int(entry["voxel_value"])] = str(entry["name"])
+                except (ValueError, TypeError):
+                    pass
+        if out:
+            return out
+
     if isinstance(raw, dict):
-        # Could be { "value": { ... } } or direct mapping
-        result = {}
+        out = {}
         for k, v in raw.items():
             if isinstance(v, dict) and "name" in v:
                 try:
-                    result[int(k)] = v["name"]
+                    out[int(k)] = str(v["name"])
                 except (ValueError, TypeError):
                     pass
             elif isinstance(v, str):
                 try:
-                    result[int(k)] = v
+                    out[int(k)] = v
                 except (ValueError, TypeError):
                     pass
-        if result:
-            return result
+        if out:
+            return out
+
     raise ValueError(
-        f"Unrecognised label.json format in {label_path}. "
-        "Expected a list of {{voxel_value, name}} objects or a mapping."
+        f"Unrecognized label.json format in {label_path}. "
+        "Expected a list of {voxel_value, name} objects or a mapping."
     )
+
+
+def load_3d_nifti(path: Path) -> Tuple[nib.Nifti1Image, np.ndarray]:
+    """Load a NIfTI image and collapse only a singleton trailing 4th dim."""
+    img = nib.load(str(path))
+    data = np.asarray(img.dataobj)
+
+    if data.ndim == 4 and data.shape[-1] == 1:
+        data = data[..., 0]
+
+    if data.ndim != 3:
+        raise ValueError(
+            f"Expected a 3D volume, or 4D with singleton last axis, "
+            f"but got shape {data.shape} from {path}"
+        )
+
+    return img, data
+
+
+def should_exclude_label(name: str) -> bool:
+    return any(s in name for s in EXCLUDE_NAME_SUBSTRINGS)
+
+
+def collect_hemi_values(label_map: Dict[int, str]) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Build left/right label sets from FreeSurfer-style names and values.
+
+    Includes:
+      - names beginning with Left- / Right-
+      - cortical parcel conventions:
+          1000-1999 -> left
+          2000-2999 -> right
+
+    Excludes some obvious non-parenchymal / undesirable structures by name.
+    """
+    left_values = set()
+    right_values = set()
+
+    for vv, name in label_map.items():
+        if should_exclude_label(name):
+            continue
+
+        if name.startswith("Left-"):
+            left_values.add(vv)
+        elif name.startswith("Right-"):
+            right_values.add(vv)
+
+        # FreeSurfer cortical annotation conventions
+        if 1000 <= vv < 2000:
+            left_values.add(vv)
+        elif 2000 <= vv < 3000:
+            right_values.add(vv)
+
+    if not left_values:
+        raise ValueError("No left-hemisphere labels found after filtering.")
+    if not right_values:
+        raise ValueError("No right-hemisphere labels found after filtering.")
+
+    return np.array(sorted(left_values), dtype=np.int32), np.array(sorted(right_values), dtype=np.int32)
 
 
 def make_hemi_masks(
     aparc_path: Path,
     label_path: Path,
     out_dir: Path,
-) -> tuple[Path, Path]:
-    """Create hemi_L.nii.gz and hemi_R.nii.gz in out_dir."""
+) -> Tuple[Path, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     label_map = load_label_json(label_path)
+    left_values, right_values = collect_hemi_values(label_map)
 
-    left_values = {
-        vv for vv, name in label_map.items() if name.startswith("Left-")
-    }
-    right_values = {
-        vv for vv, name in label_map.items() if name.startswith("Right-")
-    }
+    print(f"[make_hemi_masks] Left labels  ({len(left_values)}): {left_values.tolist()}")
+    print(f"[make_hemi_masks] Right labels ({len(right_values)}): {right_values.tolist()}")
 
-    if not left_values:
-        raise ValueError("No labels starting with 'Left-' found in label.json")
-    if not right_values:
-        raise ValueError("No labels starting with 'Right-' found in label.json")
+    img, data = load_3d_nifti(aparc_path)
 
-    print(f"[make_hemi_masks] Left labels  ({len(left_values)}): {sorted(left_values)}")
-    print(f"[make_hemi_masks] Right labels ({len(right_values)}): {sorted(right_values)}")
+    # FreeSurfer aparc values are labels, but may be stored as float-like arrays.
+    # Round to nearest integer before matching.
+    if not np.issubdtype(data.dtype, np.integer):
+        data = np.rint(data).astype(np.int32)
+    else:
+        data = data.astype(np.int32, copy=False)
 
-    img = nib.load(str(aparc_path))
-    data = np.asarray(img.dataobj)
+    lh_mask = np.isin(data, left_values).astype(np.uint8)
+    rh_mask = np.isin(data, right_values).astype(np.uint8)
 
-    lh_mask = np.zeros(data.shape, dtype=np.uint8)
-    rh_mask = np.zeros(data.shape, dtype=np.uint8)
-
-    for vv in left_values:
-        lh_mask[data == vv] = 1
-    for vv in right_values:
-        rh_mask[data == vv] = 1
+    overlap = int(np.count_nonzero(lh_mask & rh_mask))
+    if overlap != 0:
+        raise ValueError(f"Left/right masks overlap in {overlap} voxels, which should not happen.")
 
     lh_path = out_dir / "hemi_L.nii.gz"
     rh_path = out_dir / "hemi_R.nii.gz"
 
-    for out_path, mask in [(lh_path, lh_mask), (rh_path, rh_mask)]:
-        out_img = nib.Nifti1Image(mask, img.affine, img.header)
+    for out_path, mask in ((lh_path, lh_mask), (rh_path, rh_mask)):
+        out_img = nib.Nifti1Image(mask, img.affine, img.header.copy())
         out_img.set_data_dtype(np.uint8)
         nib.save(out_img, str(out_path))
-        nvox = int(mask.sum())
-        print(f"[make_hemi_masks] Saved {out_path.name}  ({nvox} voxels)")
+        print(f"[make_hemi_masks] Saved {out_path.name}  ({int(mask.sum())} voxels)")
 
     return lh_path, rh_path
 
@@ -109,9 +186,9 @@ def main() -> None:
     ap.add_argument("--aparc", required=True, type=Path,
                     help="Parcellation volume (aparc.nii.gz)")
     ap.add_argument("--label", required=True, type=Path,
-                    help="Label JSON file mapping voxel values to region names")
-    ap.add_argument("--out-dir", default=".", type=Path,
-                    help="Output directory (default: current dir)")
+                    help="Label JSON mapping voxel values to region names")
+    ap.add_argument("--out-dir", required=True, type=Path,
+                    help="Output directory")
     args = ap.parse_args()
 
     if not args.aparc.exists():
