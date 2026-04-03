@@ -43,6 +43,19 @@ LABEL_TO_VAL = {lab: i + 1 for i, lab in enumerate(AREA_LABELS)}
 # Polar-angle threshold that separates dorsal from ventral banks (degrees)
 DORSOVENTRAL_THRESHOLD = 90.0
 
+def _load_nifti_array(path: Path, name: str) -> tuple[nib.Nifti1Image, np.ndarray]:
+    img = nib.load(str(path))
+    arr = np.asarray(img.dataobj)
+
+    # Common case: empty/singleton 4th dimension
+    arr = np.squeeze(arr)
+
+    if arr.ndim != 3:
+        raise ValueError(
+            f"{name} must be 3D after squeeze, but got shape {arr.shape} from {path}"
+        )
+
+    return img, arr
 
 def _save_mask(data: np.ndarray, ref_img, out_path: Path) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,14 +81,13 @@ def make_roi_masks(
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    varea_img = nib.load(str(varea_path))
-    varea = np.asarray(varea_img.dataobj)
-
-    angle_img = nib.load(str(angle_path))
-    angle = np.asarray(angle_img.dataobj)
-
-    lh = np.asarray(nib.load(str(hemi_l_path)).dataobj) > 0
-    rh = np.asarray(nib.load(str(hemi_r_path)).dataobj) > 0
+    varea_img, varea = _load_nifti_array(varea_path, "varea")
+    angle_img, angle = _load_nifti_array(angle_path, "angle")
+    _, lh = _load_nifti_array(hemi_l_path, "hemi_l")
+    _, rh = _load_nifti_array(hemi_r_path, "hemi_r")
+    
+    lh = lh > 0
+    rh = rh > 0
 
     masks: dict[str, Path] = {}
 
