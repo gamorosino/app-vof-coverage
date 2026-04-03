@@ -45,10 +45,7 @@ def _load_bin(path: Path) -> Optional[np.ndarray]:
             f"ROI mask must be 3D after squeeze, but got shape {arr.shape} from {path}"
         )
 
-    return (arr > 0).astype(np.uint8)def _load_bin(path: Path) -> Optional[np.ndarray]:
-    if not path.exists():
-        return None
-    return (np.asarray(nib.load(str(path)).dataobj) > 0).astype(np.uint8)
+    return (arr > 0).astype(np.uint8)
 
 
 def _union(arrays: List[np.ndarray]) -> Optional[np.ndarray]:
