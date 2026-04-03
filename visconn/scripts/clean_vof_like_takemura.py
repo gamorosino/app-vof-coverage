@@ -35,7 +35,7 @@ def _tcklen_filter(in_tck: Path, out_tck: Path, min_len: float) -> Path:
     cmd = [
         "tckedit", str(in_tck), str(out_tck),
         "-minlength", str(min_len),
-        "-quiet",
+        "-quiet", "-force"
     ]
     print("[clean_vof] " + " ".join(cmd))
     subprocess.run(cmd, check=True)
@@ -81,7 +81,7 @@ def _z_filter(
     cmd = [
         "tckedit", str(in_tck), str(out_tck),
         "-include", str(tmp_mask_path),
-        "-quiet",
+        "-quiet","-force"
     ]
     print("[clean_vof] " + " ".join(cmd))
     try:
@@ -97,7 +97,7 @@ def _exclude_filter(in_tck: Path, out_tck: Path, exclude_mask: Path) -> Path:
     cmd = [
         "tckedit", str(in_tck), str(out_tck),
         "-exclude", str(exclude_mask),
-        "-quiet",
+        "-quiet","-force"
     ]
     print("[clean_vof] " + " ".join(cmd))
     subprocess.run(cmd, check=True)
