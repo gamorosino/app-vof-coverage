@@ -225,7 +225,8 @@ def main() -> None:
     r2           = _opt(cfg, "r2")
     eccentricity = _opt(cfg, "eccentricity")
     rf_width     = _opt(cfg, "rfWidth", "rf_width")
-
+    use_wm_mask = _opt(cfg, "use_wm_mask", default=True)
+    use_wm_mask = bool(use_wm_mask)
     # ------------------------------------------------------------------
     # Output directories (Brainlife-style)
     # ------------------------------------------------------------------
@@ -277,12 +278,16 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Step 3 — WM mask from tractogram
     # ------------------------------------------------------------------
-    print("\n[VISCONN] === Step 3: WM mask (track_getMask) ===")
-    wm_mask = masks_dir / "wm_mask.nii.gz"
-    if not wm_mask.exists():
-        track_getMask(tractogram, wm_mask, t1)
+    if use_wm_mask:
+        print("\n[VISCONN] === Step 3: WM mask (track_getMask) ===")
+        wm_mask = masks_dir / "wm_mask.nii.gz"
+        if not wm_mask.exists():
+            track_getMask(tractogram, wm_mask, t1)
+        else:
+            print("[VISCONN] WM mask already exists, skipping.")
     else:
-        print("[VISCONN] WM mask already exists, skipping.")
+        wm_mask = None
+        print("\n[VISCONN] === Step 3: WM mask skipped (disabled) ===")
 
     # ------------------------------------------------------------------
     # Steps 4–6: Per-hemisphere VOF extraction and coverage mapping
@@ -293,13 +298,19 @@ def main() -> None:
         contralateral_hemi_mask = hemi_r if hemi == "lh" else hemi_l
 
         print(f"\n[VISCONN] === {hemi.upper()}: Waypoints ===")
-        _run_script(
-            MAKE_VWP,
-            "--wm",         wm_mask,
+        args_vwp = [
             "--rois-dir",   roi_dir,
             "--hemisphere", hemi,
             "--out-dir",    wp_dir,
-        )
+        ]
+        
+        if use_wm_mask:
+            print(f"[VISCONN] Using WM mask for waypoints: {wm_mask}")
+            args_vwp = ["--wm", wm_mask] + args_vwp
+        else:
+            print("[VISCONN] WM mask disabled for waypoint construction")
+        
+        _run_script(MAKE_VWP, *args_vwp)
         wp_ventral = wp_dir / f"{hemi}_wp_ventral.nii.gz"
         wp_dorsal  = wp_dir / f"{hemi}_wp_dorsal.nii.gz"
 
