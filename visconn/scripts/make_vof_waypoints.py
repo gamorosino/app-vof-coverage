@@ -70,7 +70,7 @@ def _save(data: np.ndarray, ref_img, out_path: Path) -> Path:
 
 
 def make_vof_waypoints(
-    wm_mask_path: Path,
+    wm_mask_path: Optional[Path],
     rois_dir: Path,
     hemisphere: str,
     out_dir: Path,
@@ -82,7 +82,8 @@ def make_vof_waypoints(
 
     Parameters
     ----------
-    wm_mask_path  : Binary WM mask (from track_getMask).
+    wm_mask_path  : Optional binary WM mask. Accepted for backward compatibility
+                    but not used to expand waypoint masks.
     rois_dir      : Directory that contains the per-hemisphere ROI .nii.gz files.
     hemisphere    : "lh" or "rh".
     out_dir       : Where to write the output waypoint masks.
@@ -101,31 +102,42 @@ def make_vof_waypoints(
     if dorsal_rois is None:
         dorsal_rois = DORSAL_ROIS
 
-    wm_img = nib.load(str(wm_mask_path))
-    wm = np.asarray(wm_img.dataobj)
-    wm = np.squeeze(wm)
-    
-    if wm.ndim != 3:
-        raise ValueError(
-            f"WM mask must be 3D after squeeze, but got shape {wm.shape} from {wm_mask_path}"
-        )
-    
-    wm = (wm > 0).astype(np.uint8)
-
-    def _load_group(roi_tags: List[str]) -> List[np.ndarray]:
+    def _load_group(roi_tags: List[str]) -> tuple[List[np.ndarray], Optional[nib.Nifti1Image]]:
         loaded = []
+        ref_img = None
         for tag in roi_tags:
             candidate = rois_dir / f"{hemi}.{tag}.bin.nii.gz"
-            arr = _load_bin(candidate)
-            if arr is not None:
-                print(f"[make_vof_waypoints]   loaded {candidate.name}")
-                loaded.append(arr)
-            else:
+            if not candidate.exists():
                 print(f"[make_vof_waypoints]   (missing, skipped) {candidate.name}")
-        return loaded
+                continue
 
-    ventral_arrays = _load_group(ventral_rois)
-    dorsal_arrays  = _load_group(dorsal_rois)
+            img = nib.load(str(candidate))
+            arr = np.asarray(img.dataobj)
+            arr = np.squeeze(arr)
+
+            if arr.ndim != 3:
+                raise ValueError(
+                    f"ROI mask must be 3D after squeeze, but got shape {arr.shape} from {candidate}"
+                )
+
+            arr = (arr > 0).astype(np.uint8)
+
+            if ref_img is None:
+                ref_img = img
+            else:
+                if arr.shape != loaded[0].shape:
+                    raise ValueError(
+                        f"ROI mask shape mismatch: {candidate.name} has shape {arr.shape}, "
+                        f"expected {loaded[0].shape}"
+                    )
+
+            print(f"[make_vof_waypoints]   loaded {candidate.name}")
+            loaded.append(arr)
+
+        return loaded, ref_img
+
+    ventral_arrays, ventral_ref = _load_group(ventral_rois)
+    dorsal_arrays, dorsal_ref = _load_group(dorsal_rois)
 
     if not ventral_arrays:
         raise RuntimeError(
@@ -138,25 +150,36 @@ def make_vof_waypoints(
             f"Expected any of: {[hemi + '.' + r + '.bin.nii.gz' for r in dorsal_rois]}"
         )
 
+    if ventral_arrays[0].shape != dorsal_arrays[0].shape:
+        raise ValueError(
+            f"Ventral/dorsal ROI grids do not match: "
+            f"{ventral_arrays[0].shape} vs {dorsal_arrays[0].shape}"
+        )
+
+    ref_img = ventral_ref if ventral_ref is not None else dorsal_ref
+    if ref_img is None:
+        raise RuntimeError("Could not determine a reference image from ROI masks.")
+
     ventral_union = _union(ventral_arrays)
-    dorsal_union  = _union(dorsal_arrays)
+    dorsal_union = _union(dorsal_arrays)
 
-    # Expand each cortical ROI mask with the WM mask so that tckedit can catch
-    # streamlines terminating at or near the GM/WM boundary.
-    def _expand_with_wm(roi_arr: np.ndarray) -> np.ndarray:
-        min_shape = tuple(min(x, y) for x, y in zip(roi_arr.shape, wm.shape))
-        sl = tuple(slice(0, s) for s in min_shape)
-        combined = (roi_arr[sl] | wm[sl]).astype(np.uint8)
-        return combined
+    # NOTE:
+    # wm_mask_path is accepted for backward compatibility, but waypoint masks are
+    # no longer expanded with WM because WM may be in a different image space.
+    if wm_mask_path is not None:
+        print(
+            f"[make_vof_waypoints] WM mask provided ({wm_mask_path}) but ignored "
+            f"for waypoint construction."
+        )
 
-    wp_ventral_data = _expand_with_wm(ventral_union)
-    wp_dorsal_data  = _expand_with_wm(dorsal_union)
+    wp_ventral_data = (ventral_union > 0).astype(np.uint8)
+    wp_dorsal_data = (dorsal_union > 0).astype(np.uint8)
 
     wp_ventral_path = out_dir / f"{hemi}_wp_ventral.nii.gz"
-    wp_dorsal_path  = out_dir / f"{hemi}_wp_dorsal.nii.gz"
+    wp_dorsal_path = out_dir / f"{hemi}_wp_dorsal.nii.gz"
 
-    _save(wp_ventral_data, wm_img, wp_ventral_path)
-    _save(wp_dorsal_data,  wm_img, wp_dorsal_path)
+    _save(wp_ventral_data, ref_img, wp_ventral_path)
+    _save(wp_dorsal_data, ref_img, wp_dorsal_path)
 
     return wp_ventral_path, wp_dorsal_path
 
