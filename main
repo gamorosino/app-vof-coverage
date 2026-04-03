@@ -14,12 +14,10 @@ CONTAINER_IMAGE="${BL_CONTAINER_IMAGE:-docker://gamorosino/tract_align:v1.0}"
 run_in_env() {
     if singularity exec -e "${CONTAINER_IMAGE}" sh -lc 'command -v micromamba >/dev/null 2>&1'; then
         singularity exec -e \
-            --bind "${SCRIPT_DIR}:${SCRIPT_DIR}" \
             "${CONTAINER_IMAGE}" \
             micromamba run -n tract_align "$@"
     else
         singularity exec -e \
-            --bind "${SCRIPT_DIR}:${SCRIPT_DIR}" \
             "${CONTAINER_IMAGE}" \
             "$@"
     fi
