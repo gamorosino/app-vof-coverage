@@ -32,7 +32,20 @@ VENTRAL_ROIS = ["hv4", "v2.ventral", "v3.ventral", "vo1", "vo2"]
 DORSAL_ROIS  = ["v3a", "v3b", "v2.dorsal", "v3.dorsal"]
 
 
+
 def _load_bin(path: Path) -> Optional[np.ndarray]:
+    if not path.exists():
+        return None
+
+    arr = np.asarray(nib.load(str(path)).dataobj)
+    arr = np.squeeze(arr)
+
+    if arr.ndim != 3:
+        raise ValueError(
+            f"ROI mask must be 3D after squeeze, but got shape {arr.shape} from {path}"
+        )
+
+    return (arr > 0).astype(np.uint8)def _load_bin(path: Path) -> Optional[np.ndarray]:
     if not path.exists():
         return None
     return (np.asarray(nib.load(str(path)).dataobj) > 0).astype(np.uint8)
@@ -92,7 +105,15 @@ def make_vof_waypoints(
         dorsal_rois = DORSAL_ROIS
 
     wm_img = nib.load(str(wm_mask_path))
-    wm = (np.asarray(wm_img.dataobj) > 0).astype(np.uint8)
+    wm = np.asarray(wm_img.dataobj)
+    wm = np.squeeze(wm)
+    
+    if wm.ndim != 3:
+        raise ValueError(
+            f"WM mask must be 3D after squeeze, but got shape {wm.shape} from {wm_mask_path}"
+        )
+    
+    wm = (wm > 0).astype(np.uint8)
 
     def _load_group(roi_tags: List[str]) -> List[np.ndarray]:
         loaded = []
