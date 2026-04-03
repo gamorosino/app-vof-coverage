@@ -156,6 +156,7 @@ def run_tckedit(
         "-include", str(include1),
         "-include", str(include2),
         "-exclude", str(exclude),
+        "-force"
     ]
     if ends_only:
         cmd.append("-ends_only")
