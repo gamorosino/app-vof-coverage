@@ -388,7 +388,18 @@ def main() -> None:
                 "--group", group,
             )
             # Also copy to images dir for Brainlife
+            # Copy CSV to images dir
             shutil.copy2(str(out_bilateral), str(images_dir / out_bilateral.name))
+            
+            # Copy associated figure(s) if they exist
+            fig_prefix = out_bilateral.with_suffix("")
+            if fig_prefix.suffix == ".nii":
+                fig_prefix = fig_prefix.with_suffix("")
+            
+            for ext in (".png", ".pdf", ".svg"):
+                fig_file = Path(str(fig_prefix) + ext)
+                if fig_file.exists():
+                    shutil.copy2(str(fig_file), str(images_dir / fig_file.name))
         else:
             print(f"[VISCONN] Skipping bilateral average for '{group}' "
                   "(one or both hemispheres missing).")
