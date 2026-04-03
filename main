@@ -9,7 +9,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONTAINER_IMAGE="${BL_CONTAINER_IMAGE:-docker://gamorosino/tract_align:v1.0}"
+CONTAINER_IMAGE="docker://gamorosino/tract_align:v1.0"
 
     run_in_env() {
         singularity exec -e \
