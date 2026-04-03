@@ -188,8 +188,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Generate ventral and dorsal VOF waypoint masks."
     )
-    ap.add_argument("--wm", required=True, type=Path,
-                    help="WM binary mask (wm_mask.nii.gz)")
+    ap.add_argument("--wm",    type=Path,    default=None,
+                    help="Optional WM mask (ignored; kept for backward compatibility)",)
     ap.add_argument("--rois-dir", required=True, type=Path,
                     help="Directory containing per-hemisphere ROI .nii.gz masks")
     ap.add_argument("--hemisphere", required=True, choices=["lh", "rh"],
