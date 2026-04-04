@@ -344,6 +344,17 @@ def main() -> None:
         )
 
         # ------------------------------------------------------------------
+        # Export to Brainlife-style per-hemisphere directories
+        # ------------------------------------------------------------------
+        out_dir = Path("vof_left") if hemi == "lh" else Path("vof_right")
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        out_track = out_dir / "track.tck"
+        shutil.copy2(str(clean_tck), str(out_track))
+
+        print(f"[VISCONN] Exported {hemi} VOF → {out_track}")
+
+        # ------------------------------------------------------------------
         # vof_map_coverage — per group
         # ------------------------------------------------------------------
         for group in ("ventral", "dorsal", "lo"):
@@ -405,7 +416,7 @@ def main() -> None:
                   "(one or both hemispheres missing).")
 
     print("\n[VISCONN] ✓ Pipeline complete.")
-    print(f"  Tractograms : {vof_dir}/")
+    print("  Tractograms : vof_left/ , vof_right/")
     print(f"  Images      : {images_dir}/")
     print(f"  CSVs        : {csv_dir}/")
 
