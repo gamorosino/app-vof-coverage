@@ -14,13 +14,7 @@ CONTAINER_IMAGE="docker://gamorosino/tract_align:v1.0"
     run_in_env() {
         singularity exec -e \
             "${CONTAINER_IMAGE}" \
-            bash -lc '
-                if command -v micromamba >/dev/null 2>&1; then
-                    micromamba run -n tract_align "$@"
-                else
-                    "$@"
-                fi
-            ' bash "$@"
+                micromamba run -n tract_align "$@"
     }
 
 
