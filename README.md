@@ -1,5 +1,51 @@
 # Vertical Occipital Fasciculus (VOF) Coverage Quantification
 
+<!-- brainlife-app:begin (generated from the App manifest; edit the manifest, not this block) -->
+
+> **Extracts the left and right vertical occipital fasciculus (VOF) from a tractogram with MRtrix3 waypoints derived from retinotopic visual areas and computes its cortical coverage across ventral, dorsal and lateral occipital areas.**
+
+Builds hemisphere masks from the aparc parcellation and visual-area ROI masks from the Benson varea and polar angle maps, then for each hemisphere selects streamlines with tckedit through ventral and dorsal waypoints, cleans them following Takemura et al. (2016) and maps their endpoint coverage over ventral, dorsal and lateral occipital visual areas, writing coverage CSVs and track-density images. Requires the tractogram and anatomy to be in the same space as the pRF and parcellation maps.
+
+| | |
+|---|---|
+| 📥 **Inputs** | `neuro/track/tck` · `neuro/anat/t1w` · `neuro/freesurfer` · `neuro/prf` · `neuro/parcellation/volume` |
+| 📤 **Outputs** | `generic/images` · `neuro/track/tck` ×2 · `neuro/tcks` |
+| 🐳 **Container** | `gamorosino/tract_align:v1.0` |
+| 🔗 **Run it** | [doi.org/10.25663/brainlife.app.917](https://doi.org/10.25663/brainlife.app.917) |
+
+#### 📥 Inputs
+
+| Input | Datatype | Required | Description |
+|---|---|---|---|
+| `tractogram` | `neuro/track/tck` | yes | Whole-brain tractogram (.tck) to extract the VOF from. |
+| `t1` | `neuro/anat/t1w` | yes | T1-weighted reference image in the same space as the tractogram. |
+| `freesurfer` | `neuro/freesurfer` | yes | FreeSurfer subject directory. |
+| `prf` | `neuro/prf` | yes | pRF / retinotopy maps; the visual areas (varea) and polar angle maps are required. |
+| `aparc` | `neuro/parcellation/volume` | yes | Volumetric aparc parcellation with label.json, used to build hemisphere masks. |
+
+#### 📤 Outputs
+
+| Output | Datatype | Description |
+|---|---|---|
+| `images` | `generic/images` | Track-density images of the VOF per hemisphere and visual-area group. |
+| `vof_left` | `neuro/track/tck` | Cleaned left-hemisphere VOF tractogram (.tck). |
+| `vof_right` | `neuro/track/tck` | Cleaned right-hemisphere VOF tractogram (.tck). |
+| `vof` | `neuro/tcks` | Left and right VOF as a tcks collection. |
+
+<details>
+<summary><b>⚙️ Parameters</b> (1)</summary>
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `use_wm_mask` | boolean | `true` | Whether to include the white-matter mask when constructing waypoint masks for tract extraction (disabled keeps waypoints strictly defined by ROI masks in their native space). |
+
+</details>
+
+📚 **References used by this App:**
+- Takemura H et al. A major human white matter pathway between dorsal and ventral visual cortex. Cerebral Cortex (2016).
+
+<!-- brainlife-app:end -->
+
 A [Brainlife](https://brainlife.io) app that extracts the **Vertical Occipital Fasciculus (VOF)** (Takemura et al. 2016) from a tractogram and computes its cortical coverage across retinotopic visual areas.
 
 ---
